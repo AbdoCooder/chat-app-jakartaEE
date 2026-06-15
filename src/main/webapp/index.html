@@ -294,7 +294,7 @@
 
     // ── WebSocket ─────────────────────────────────────────────────────────
     const host = window.location.host;
-    const ws = new WebSocket("ws://" + host + "/");
+    const ws = new WebSocket("ws://" + host + "/chat");
 
     ws.onopen = function () {
         // Socket is ready — unlock the registration form
