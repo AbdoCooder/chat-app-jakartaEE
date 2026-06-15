@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Jakarta EE Chat</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f0f2f5;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* ── Username overlay ── */
+        #username-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.45);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+        #username-card {
+            background: #fff;
+            border-radius: 16px;
+            padding: 28px 28px 24px;
+            width: 300px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+        }
+        #username-card h2 {
+            font-size: 17px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: #1c1c1e;
+        }
+        #username-card p {
+            font-size: 13px;
+            color: #888;
+            margin-bottom: 18px;
+        }
+        #username-input {
+            width: 100%;
+            padding: 9px 14px;
+            border-radius: 10px;
+            border: 1.5px solid #e0e0e0;
+            font-size: 14px;
+            font-family: inherit;
+            outline: none;
+            margin-bottom: 12px;
+            transition: border-color 0.2s;
+        }
+        #username-input:focus { border-color: #0a84ff; }
+        #username-btn {
+            width: 100%;
+            padding: 10px;
+            border-radius: 10px;
+            background: #0a84ff;
+            color: #fff;
+            border: none;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.15s;
+        }
+        #username-btn:hover:not(:disabled) { opacity: 0.87; }
+        #username-btn:disabled { background: #ccc; cursor: not-allowed; }
+        #username-error {
+            font-size: 12px;
+            color: #e53e3e;
+            margin-top: 8px;
+            min-height: 16px;
+        }
+
+        /* ── Chat container ── */
+        #chat-container {
+            width: 400px;
+            height: 620px;
+            background: #fff;
+            border-radius: 20px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* ── Header ── */
+        #chat-header {
+            padding: 14px 18px;
+            background: #0a84ff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+        #header-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.25);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 600;
+            color: #fff;
+            flex-shrink: 0;
+        }
+        #header-name   { font-size: 15px; font-weight: 600; color: #fff; }
+        #header-status { font-size: 11px; color: rgba(255,255,255,0.75); margin-top: 1px; }
+        #online-count  { font-size: 12px; color: rgba(255,255,255,0.8); margin-left: auto; }
+
+        /* ── Messages ── */
+        #messages-container {
+            flex: 1;
+            padding: 16px 14px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .date-divider {
+            text-align: center;
+            font-size: 11px;
+            color: #aaa;
+            margin: 8px 0 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .date-divider::before, .date-divider::after {
+            content: '';
+            flex: 1;
+            height: 0.5px;
+            background: #e5e5e5;
+        }
+
+        .system-msg {
+            text-align: center;
+            font-size: 12px;
+            color: #aaa;
+            margin: 6px 0;
+            font-style: italic;
+        }
+
+        .msg-group {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 8px;
+        }
+        .msg-group.sent     { align-items: flex-end; }
+        .msg-group.received { align-items: flex-start; }
+
+        .sender-label {
+            font-size: 11px;
+            color: #999;
+            margin-bottom: 4px;
+            padding: 0 4px;
+            font-weight: 500;
+        }
+
+        .message {
+            max-width: 72%;
+            padding: 9px 14px;
+            font-size: 14.5px;
+            line-height: 1.45;
+            word-wrap: break-word;
+        }
+        .message + .message { margin-top: 2px; }
+
+        .message.sent {
+            background: #0a84ff;
+            color: #fff;
+            border-radius: 18px 18px 4px 18px;
+        }
+        .message.sent.stacked { border-radius: 18px; }
+
+        .message.received {
+            background: #f0f2f5;
+            color: #1c1c1e;
+            border-radius: 18px 18px 18px 4px;
+        }
+        .message.received.stacked { border-radius: 18px; }
+
+        .timestamp {
+            font-size: 10px;
+            color: #bbb;
+            margin-top: 4px;
+            padding: 0 4px;
+        }
+
+        /* ── Input bar ── */
+        #message-form {
+            padding: 10px 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-top: 1px solid #eee;
+            background: #fff;
+            flex-shrink: 0;
+        }
+        #message {
+            flex: 1;
+            padding: 9px 16px;
+            border-radius: 22px;
+            border: 1.5px solid #e0e0e0;
+            background: #f8f8f8;
+            font-size: 14px;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s, background 0.2s;
+        }
+        #message:focus { border-color: #0a84ff; background: #fff; }
+        #send-btn {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background: #0a84ff;
+            color: #fff;
+            border: none;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: opacity 0.15s, transform 0.1s;
+            flex-shrink: 0;
+        }
+        #send-btn:hover  { opacity: 0.85; }
+        #send-btn:active { transform: scale(0.93); }
+        #send-btn:disabled { background: #ccc; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+
+<div id="chat-container">
+
+    <!-- Username prompt | shown before start chatting to register the client -->
+    <div id="username-overlay">
+        <div id="username-card">
+            <h2>Choose a username</h2>
+            <p>Pick a name others will see in the chat.</p>
+            <input id="username-input" type="text" placeholder="e.g. Ahmed" maxlength="24" autocomplete="off" disabled>
+            <button id="username-btn" disabled>Connecting…</button>
+            <div id="username-error"></div>
+        </div>
+    </div>
+
+    <div id="chat-header">
+        <div id="header-avatar">?</div>
+        <div>
+            <div id="header-name">Jakarta EE Chat</div>
+            <div id="header-status">Connecting…</div>
+        </div>
+        <span id="online-count"></span>
+    </div>
+
+    <div id="messages-container">
+        <div class="date-divider">Today</div>
+    </div>
+
+    <form id="message-form">
+        <input id="message" type="text" placeholder="Message…" autocomplete="off" disabled>
+        <button id="send-btn" type="submit" disabled>&#8593;</button>
+    </form>
+
+</div>
+
+<script>
+    // ── DOM refs ──────────────────────────────────────────────────────────
+    const overlay       = document.getElementById("username-overlay");
+    const usernameInput = document.getElementById("username-input");
+    const usernameBtn   = document.getElementById("username-btn");
+    const usernameError = document.getElementById("username-error");
+
+    const headerAvatar = document.getElementById("header-avatar");
+    const headerStatus = document.getElementById("header-status");
+    const headerName   = document.getElementById("header-name");
+
+    const msgContainer = document.getElementById("messages-container");
+    const form         = document.getElementById("message-form");
+    const input        = document.getElementById("message");
+    const sendBtn      = document.getElementById("send-btn");
+
+    // ── State ─────────────────────────────────────────────────────────────
+    let myUsername = null;
+    let lastGroup  = null;
+
+    // ── WebSocket ─────────────────────────────────────────────────────────
+    const host = window.location.host;
+    const ws = new WebSocket("ws://" + host + "/");
+
+    ws.onopen = function () {
+        // Socket is ready — unlock the registration form
+        usernameInput.disabled  = false;
+        usernameBtn.disabled    = false;
+        usernameBtn.textContent = "Join Chat";
+        headerStatus.textContent = "Connected — choose a username";
+        usernameInput.focus();
+    };
+
+    ws.onclose = function () {
+        headerStatus.textContent = "● Disconnected";
+        input.disabled = true;
+        sendBtn.disabled = true;
+    };
+
+    ws.onerror = function () {
+        headerStatus.textContent = "Connection error";
+    };
+
+    ws.onmessage = function (event) {
+        const raw = event.data;
+
+        // ── Registration responses ──
+        if (raw.startsWith("system:Welcome,")) {
+            // Registration confirmed — hide overlay and open the chat
+            overlay.style.display    = "none";
+            input.disabled           = false;
+            sendBtn.disabled         = false;
+            headerStatus.textContent = "● Online";
+            input.focus();
+            addSystemMsg(raw.slice("system:".length));
+            return;
+        }
+
+        if (raw.startsWith("error:")) {
+            // Show error in the overlay and let the user try again
+            usernameError.textContent   = raw.slice("error:".length);
+            usernameBtn.disabled        = false;
+            usernameBtn.textContent     = "Join Chat";
+            usernameInput.disabled      = false;
+            usernameInput.focus();
+            myUsername = null;
+            return;
+        }
+
+        if (raw.startsWith("system:")) {
+            addSystemMsg(raw.slice("system:".length));
+            return;
+        }
+
+        // ── Chat message: "chat:<username>:<text>" ──
+        if (raw.startsWith("chat:")) {
+            const idx      = raw.indexOf(":", 5);   // second colon
+            const sender   = raw.slice(5, idx);
+            const text     = raw.slice(idx + 1);
+            addBubble(text, "received", sender);
+        }
+    };
+
+    // ── Username registration ─────────────────────────────────────────────
+    function register() {
+        const name = usernameInput.value.trim();
+        if (!name) {
+            usernameError.textContent = "Please enter a username.";
+            return;
+        }
+        if (ws.readyState !== WebSocket.OPEN) {
+            usernameError.textContent = "Not connected yet — please wait a moment.";
+            return;
+        }
+
+        usernameError.textContent   = "";
+        usernameBtn.disabled        = true;
+        usernameInput.disabled      = true;
+        usernameBtn.textContent     = "Joining…";
+        myUsername = name;
+
+        // Pre-fill header immediately; server confirms with system:Welcome,…
+        headerAvatar.textContent = name.slice(0, 2).toUpperCase();
+        headerName.textContent   = name;
+        headerStatus.textContent = "Joining…";
+
+        ws.send("register:" + name);
+    }
+
+    usernameBtn.addEventListener("click", register);
+    usernameInput.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") register();
+    });
+
+    // ── Sending messages ──────────────────────────────────────────────────
+    form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        const text = input.value.trim();
+        if (text && ws.readyState === WebSocket.OPEN) {
+            ws.send(text);
+            addBubble(text, "sent", myUsername);
+            input.value = "";
+            input.focus();
+        }
+    });
+
+    // ── Rendering helpers ─────────────────────────────────────────────────
+    function now() {
+        return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    }
+
+    function scrollToBottom() {
+        msgContainer.scrollTop = msgContainer.scrollHeight;
+    }
+
+    function addSystemMsg(text) {
+        lastGroup = null; // break any open group
+        const div = document.createElement("div");
+        div.className   = "system-msg";
+        div.textContent = text;
+        msgContainer.appendChild(div);
+        scrollToBottom();
+    }
+
+    /**
+     * Adds a chat bubble.
+     * Consecutive bubbles from the same sender stack into one group.
+     */
+    function addBubble(text, type, sender) {
+        const sameGroup = lastGroup
+            && lastGroup.type   === type
+            && lastGroup.sender === sender;
+
+        if (sameGroup) {
+            // Remove old timestamp, add new bubble, re-append timestamp
+            const oldTs = lastGroup.el.querySelector(".timestamp");
+            if (oldTs) oldTs.remove();
+
+            const prev = lastGroup.el.querySelector(".message:last-of-type");
+            if (prev) prev.classList.add("stacked");
+
+            const bubble = document.createElement("div");
+            bubble.className   = "message " + type + " stacked";
+            bubble.textContent = text;
+            lastGroup.el.appendChild(bubble);
+        } else {
+            const group = document.createElement("div");
+            group.className = "msg-group " + type;
+
+            const label = document.createElement("span");
+            label.className   = "sender-label";
+            label.textContent = type === "sent" ? "You" : sender;
+            group.appendChild(label);
+
+            const bubble = document.createElement("div");
+            bubble.className   = "message " + type;
+            bubble.textContent = text;
+            group.appendChild(bubble);
+
+            msgContainer.appendChild(group);
+            lastGroup = { el: group, type, sender };
+        }
+
+        const ts = document.createElement("span");
+        ts.className   = "timestamp";
+        ts.textContent = now();
+        lastGroup.el.appendChild(ts);
+
+        scrollToBottom();
+    }
+</script>
+
+</body>
+</html>
